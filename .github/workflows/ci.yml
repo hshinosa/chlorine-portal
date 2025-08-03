@@ -75,11 +75,8 @@ jobs:
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2.1.1
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.projectKey=hshinosa_chlorine-portal
-            -Dsonar.organization=hshinosa
-            -Dsonar.tests=tests
-            -Dsonar.php.coverage.reportPaths=clover.xml
-            -Dsonar.exclusions=resources/js/components/ui/**
+            -Dsonar.verbose=true
