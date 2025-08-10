@@ -6,11 +6,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.
@@ -21,6 +22,16 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'phone',
+        'address',
+        'birth_date',
+        'birth_place',
+        'institution',
+        'major',
+        'semester',
+        'gpa',
+        'role',
+        'avatar'
     ];
 
     /**
@@ -43,6 +54,83 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'birth_date' => 'date',
+            'semester' => 'integer',
+            'gpa' => 'decimal:2',
         ];
+    }
+
+    // Relationships
+    public function pendaftaranSertifikasi()
+    {
+        return $this->hasMany(PendaftaranSertifikasi::class);
+    }
+
+    public function pendaftaranPKL()
+    {
+        return $this->hasMany(PendaftaranPKL::class);
+    }
+
+    public function penilaianSertifikasiAsAsesor()
+    {
+        return $this->hasMany(PenilaianSertifikasi::class, 'asesor_id');
+    }
+
+    public function penilaianPKLAsPembimbing()
+    {
+        return $this->hasMany(PenilaianPKL::class, 'pembimbing_id');
+    }
+
+    public function sertifikasiCreated()
+    {
+        return $this->hasMany(Sertifikasi::class, 'created_by');
+    }
+
+    public function sertifikasiUpdated()
+    {
+        return $this->hasMany(Sertifikasi::class, 'updated_by');
+    }
+
+    // Scopes
+    public function scopeAdmin($query)
+    {
+        return $query->where('role', 'admin');
+    }
+
+    public function scopeUser($query)
+    {
+        return $query->where('role', 'user');
+    }
+
+    public function scopeAsesor($query)
+    {
+        return $query->where('role', 'asesor');
+    }
+
+    // Accessors
+    public function getAvatarUrlAttribute()
+    {
+        return $this->avatar ? asset('storage/' . $this->avatar) : null;
+    }
+
+    public function getFullNameAttribute()
+    {
+        return $this->name;
+    }
+
+    // Methods
+    public function isAdmin()
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isUser()
+    {
+        return $this->role === 'user';
+    }
+
+    public function isAsesor()
+    {
+        return $this->role === 'asesor';
     }
 }

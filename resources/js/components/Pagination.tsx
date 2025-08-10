@@ -9,7 +9,7 @@ interface PaginationProps {
     readonly itemsPerPage: number;
     readonly totalItems: number;
     readonly onPageChange: (page: number) => void;
-    readonly onItemsPerPageChange: (itemsPerPage: number) => void;
+    readonly onItemsPerPageChange?: (itemsPerPage: number) => void;
 }
 
 export default function Pagination({
@@ -74,24 +74,26 @@ export default function Pagination({
                     Menampilkan {startItem}-{endItem} dari {totalItems} data
                 </div>
                 
-                <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Tampilkan</span>
-                    <Select
-                        value={itemsPerPage.toString()}
-                        onValueChange={(value) => onItemsPerPageChange(Number(value))}
-                    >
-                        <SelectTrigger className="w-16 h-8">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="5">5</SelectItem>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="20">20</SelectItem>
-                            <SelectItem value="50">50</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <span className="text-sm text-muted-foreground">per halaman</span>
-                </div>
+                {onItemsPerPageChange && (
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Tampilkan</span>
+                        <Select
+                            value={itemsPerPage.toString()}
+                            onValueChange={(value) => onItemsPerPageChange(Number(value))}
+                        >
+                            <SelectTrigger className="w-16 h-8">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="5">5</SelectItem>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="20">20</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">per halaman</span>
+                    </div>
+                )}
             </div>
 
             {/* Navigation Controls */}

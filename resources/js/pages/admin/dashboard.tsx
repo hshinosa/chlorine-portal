@@ -1,386 +1,589 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import AppLayout from '@/layouts/app-layout';
-import DetailPendaftaranModal from '@/components/DetailPendaftaranModal';
-import FilterDropdown from '@/components/FilterDropdown';
 import SearchBar from '@/components/SearchBar';
 import Pagination from '@/components/Pagination';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
-import { useState } from 'react';
-
-interface BiodataPeserta {
-    nama: string;
-    tempatTanggalLahir: string;
-    alamat: string;
-    email: string;
-    noTelepon: string;
-}
-
-interface SertifikasiKompetensi {
-    namaSertifikasi: string;
-    jadwalSertifikasi: string;
-    batch: string;
-    assessor: string;
-}
-
-interface PendaftaranData {
-    id: number;
-    nama: string;
-    jenisPendaftaran: string;
-    tanggalPendaftaran: string;
-    status: 'Pengajuan' | 'Disetujui' | 'Ditolak';
-    statusColor: string;
-    biodata: BiodataPeserta;
-    sertifikasi: SertifikasiKompetensi;
-}
-
-// Interface untuk active filters
-interface ActiveFilters {
-    jenisPendaftaran: string[];
-    tanggalPendaftaran: {
-        startDate: string;
-        endDate: string;
-    } | null;
-    status: string[];
-}
+import { Head, Link } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import { Plus, FileText, Video, Award, Briefcase, Users, Eye, Loader2, TrendingUp, Calendar, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { adminDashboardService, type DashboardData, type RecentRegistration, type PendingApplication, type ApplicationsInboxData } from '@/services/adminDashboardService';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
-        href: '/dashboard',
+        href: '/admin/dashboard',
     },
 ];
 
 export default function Dashboard() {
-    const [selectedPendaftar, setSelectedPendaftar] = useState<PendaftaranData | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(10);
-    const [activeFilters, setActiveFilters] = useState<ActiveFilters>({
-        jenisPendaftaran: [],
-        tanggalPendaftaran: null,
-        status: [],
-    });
+    // State untuk data dashboard dari backend
+    const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    // Selected item (extended with derived fields when opened)
+    const [selectedApplication, setSelectedApplication] = useState<(RecentRegistration & { type?: 'sertifikasi' | 'pkl'; programName?: string }) | null>(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [rejectionReason, setRejectionReason] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const pendaftaranData = [
-        {
-            id: 1,
-            nama: 'Joseph',
-            jenisPendaftaran: 'Sertifikasi Kompetensi',
-            tanggalPendaftaran: '21-05-2025',
-            status: 'Pengajuan' as const,
-            statusColor: 'bg-blue-100 text-blue-800',
-            biodata: {
-                nama: 'Joseph Anderson',
-                tempatTanggalLahir: 'Jakarta, 15 Januari 1995',
-                alamat: 'Jl. Merdeka No. 123, Jakarta Selatan',
-                email: 'joseph.anderson@email.com',
-                noTelepon: '081234567890'
-            },
-            sertifikasi: {
-                namaSertifikasi: 'Teknisi Jaringan Komputer',
-                jadwalSertifikasi: '28 Juli 2025',
-                batch: 'Batch 2025-01',
-                assessor: 'Dr. Ahmad Wijaya'
-            }
-        },
-        {
-            id: 2,
-            nama: 'Sterling',
-            jenisPendaftaran: 'Praktik Kerja Lapangan',
-            tanggalPendaftaran: '22-05-2025',
-            status: 'Ditolak' as const,
-            statusColor: 'bg-red-100 text-red-800',
-            biodata: {
-                nama: 'Sterling Cooper',
-                tempatTanggalLahir: 'Bandung, 20 Maret 1996',
-                alamat: 'Jl. Asia Afrika No. 45, Bandung',
-                email: 'sterling.cooper@email.com',
-                noTelepon: '081234567891'
-            },
-            sertifikasi: {
-                namaSertifikasi: 'Praktik Kerja Lapangan IT',
-                jadwalSertifikasi: '30 Juli 2025',
-                batch: 'PKL 2025-02',
-                assessor: 'Prof. Siti Nurhaliza'
-            }
-        },
-        {
-            id: 3,
-            nama: 'Ahmad',
-            jenisPendaftaran: 'Sertifikasi Kompetensi',
-            tanggalPendaftaran: '22-05-2025',
-            status: 'Disetujui' as const,
-            statusColor: 'bg-green-100 text-green-800',
-            biodata: {
-                nama: 'Ahmad Rizki',
-                tempatTanggalLahir: 'Surabaya, 10 Februari 1994',
-                alamat: 'Jl. Pemuda No. 78, Surabaya',
-                email: 'ahmad.rizki@email.com',
-                noTelepon: '081234567892'
-            },
-            sertifikasi: {
-                namaSertifikasi: 'Web Developer',
-                jadwalSertifikasi: '01 Agustus 2025',
-                batch: 'Batch 2025-03',
-                assessor: 'Ir. Budi Santoso'
-            }
-        },
-        {
-            id: 4,
-            nama: 'Jajang',
-            jenisPendaftaran: 'Sertifikasi Kompetensi',
-            tanggalPendaftaran: '22-05-2025',
-            status: 'Pengajuan' as const,
-            statusColor: 'bg-blue-100 text-blue-800',
-            biodata: {
-                nama: 'Jajang Sutrisno',
-                tempatTanggalLahir: 'Yogyakarta, 25 Juni 1993',
-                alamat: 'Jl. Malioboro No. 12, Yogyakarta',
-                email: 'jajang.sutrisno@email.com',
-                noTelepon: '081234567893'
-            },
-            sertifikasi: {
-                namaSertifikasi: 'Database Administrator',
-                jadwalSertifikasi: '03 Agustus 2025',
-                batch: 'Batch 2025-04',
-                assessor: 'Dr. Rina Sari'
-            }
-        },
-        {
-            id: 5,
-            nama: 'Siti',
-            jenisPendaftaran: 'Praktik Kerja Lapangan',
-            tanggalPendaftaran: '22-05-2025',
-            status: 'Disetujui' as const,
-            statusColor: 'bg-green-100 text-green-800',
-            biodata: {
-                nama: 'Siti Aminah',
-                tempatTanggalLahir: 'Medan, 08 September 1997',
-                alamat: 'Jl. Gatot Subroto No. 56, Medan',
-                email: 'siti.aminah@email.com',
-                noTelepon: '081234567894'
-            },
-            sertifikasi: {
-                namaSertifikasi: 'Praktik Kerja Lapangan Multimedia',
-                jadwalSertifikasi: '05 Agustus 2025',
-                batch: 'PKL 2025-05',
-                assessor: 'M. Sc. Fitri Handayani'
-            }
-        },
-    ];
-
-    // Function untuk filter data berdasarkan search dan filters
-    const filteredData = pendaftaranData.filter((item) => {
-        // Filter berdasarkan search query
-        const matchesSearch = searchQuery === '' || 
-            item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.jenisPendaftaran.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.sertifikasi.namaSertifikasi.toLowerCase().includes(searchQuery.toLowerCase());
-
-        // Filter berdasarkan jenis pendaftaran
-        const matchesJenisPendaftaran = activeFilters.jenisPendaftaran.length === 0 ||
-            activeFilters.jenisPendaftaran.includes(item.jenisPendaftaran);
-
-        // Filter berdasarkan status
-        const matchesStatus = activeFilters.status.length === 0 ||
-            activeFilters.status.includes(item.status);
-
-        // Filter berdasarkan tanggal pendaftaran
-        const matchesTanggal = !activeFilters.tanggalPendaftaran ||
-            (() => {
-                const itemDate = new Date(item.tanggalPendaftaran.split('-').reverse().join('-')); // Convert DD-MM-YYYY to YYYY-MM-DD
-                const startDate = activeFilters.tanggalPendaftaran.startDate ? 
-                    new Date(activeFilters.tanggalPendaftaran.startDate) : null;
-                const endDate = activeFilters.tanggalPendaftaran.endDate ? 
-                    new Date(activeFilters.tanggalPendaftaran.endDate) : null;
-
-                if (startDate && endDate) {
-                    return itemDate >= startDate && itemDate <= endDate;
-                } else if (startDate) {
-                    return itemDate >= startDate;
-                } else if (endDate) {
-                    return itemDate <= endDate;
-                }
-                return true;
-            })();
-
-        return matchesSearch && matchesJenisPendaftaran && matchesStatus && matchesTanggal;
-    });
-
-    // Calculate pagination
-    const totalItems = filteredData.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const paginatedData = filteredData.slice(startIndex, endIndex);
-
-    // Handle pagination changes
-    const handlePageChange = (page: number) => {
-        setCurrentPage(page);
-    };
-
-    const handleItemsPerPageChange = (items: number) => {
-        setItemsPerPage(items);
-        setCurrentPage(1); // Reset ke halaman pertama saat mengubah items per page
-    };
-
-    const handleDetailClick = (pendaftar: PendaftaranData) => {
-        setSelectedPendaftar(pendaftar);
-        setIsModalOpen(true);
-    };
-
-    const handleModalClose = () => {
-        setIsModalOpen(false);
-        setSelectedPendaftar(null);
-    };
-
-    const handleApproval = (status: 'Disetujui' | 'Ditolak', alasan?: string) => {
-        if (status === 'Disetujui') {
-            // Logic untuk menyetujui pendaftaran
-            console.log('Pendaftaran disetujui:', selectedPendaftar);
-        } else if (status === 'Ditolak') {
-            // Logic untuk menolak pendaftaran
-            console.log('Pendaftaran ditolak:', selectedPendaftar, 'Alasan:', alasan);
+    // Load dashboard data dari backend
+    useEffect(() => {
+        // If no bearer token stored, redirect to login (avoid server-side session redirect loop)
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
         }
-        
-        // Reset state
-        handleModalClose();
-    };    return (
+    loadDashboardData();
+    }, []);
+
+    const loadDashboardData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await adminDashboardService.getDashboard();
+            setDashboardData(data);
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
+            setError('Gagal memuat data dashboard');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleApplicationAction = async (action: 'approved' | 'rejected') => {
+        if (!selectedApplication) return;
+
+        try {
+            setIsSubmitting(true);
+            // TODO: Implement update status endpoint integration (sertifikasi / pkl) berdasarkan tipe
+            // Placeholder: log action
+            console.log('ACTION', action, 'for id', selectedApplication.id, 'reason', rejectionReason);
+            
+            // Reload data
+            await loadDashboardData();
+            
+            // Close modal dan reset state
+            setIsDetailModalOpen(false);
+            setSelectedApplication(null);
+            setRejectionReason('');
+        } catch (error) {
+            console.error('Error updating application status:', error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const openDetailModal = (application: RecentRegistration & { type?: 'sertifikasi' | 'pkl'; programName?: string }) => {
+        setSelectedApplication(application);
+        setIsDetailModalOpen(true);
+        setRejectionReason('');
+    };
+
+    // Helper function untuk format status
+    const getStatusBadge = (status: string) => {
+        const statusConfig = {
+            'Pengajuan': 'bg-yellow-100 text-yellow-800',
+            'Pending': 'bg-yellow-100 text-yellow-800', // fallback if backend uses English
+            'Disetujui': 'bg-green-100 text-green-800', 
+            'Ditolak': 'bg-red-100 text-red-800',
+            'Dibatalkan': 'bg-gray-100 text-gray-800'
+        } as const;
+        return statusConfig[status as keyof typeof statusConfig] || 'bg-gray-100 text-gray-800';
+    };
+
+    // Helper function untuk format tanggal
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString('id-ID');
+    };
+
+    if (loading) {
+        return (
+            <AppLayout breadcrumbs={breadcrumbs}>
+                <Head title="Dashboard Admin" />
+                <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6 overflow-x-auto">
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-muted-foreground">Memuat data dashboard...</span>
+                    </div>
+                </div>
+            </AppLayout>
+        );
+    }
+
+    // Derive combined pending applications from recent activities
+    const combinedPending: Array<RecentRegistration & { type: 'sertifikasi' | 'pkl'; programName: string }> = [];
+    if (dashboardData) {
+        dashboardData.recent_activities.sertifikasi_registrations.forEach(r => {
+            const status = r.status;
+            if (['Pengajuan', 'Pending'].includes(status)) {
+                combinedPending.push({
+                    ...r,
+                    type: 'sertifikasi',
+                    programName: r.batch_sertifikasi?.sertifikasi.nama_sertifikasi || 'Sertifikasi'
+                });
+            }
+        });
+        dashboardData.recent_activities.pkl_applications.forEach(r => {
+            const status = r.status;
+            if (['Pengajuan', 'Pending'].includes(status)) {
+                combinedPending.push({
+                    ...r,
+                    type: 'pkl',
+                    programName: r.posisi_pkl?.nama_posisi || 'PKL'
+                });
+            }
+        });
+    }
+    const today = new Date().toLocaleDateString('id-ID');
+    const approvedToday = (dashboardData?.recent_activities.sertifikasi_registrations || []).filter(r => r.status === 'Disetujui' && new Date(r.created_at).toLocaleDateString('id-ID') === today).length
+        + (dashboardData?.recent_activities.pkl_applications || []).filter(r => r.status === 'Disetujui' && new Date(r.created_at).toLocaleDateString('id-ID') === today).length;
+    const rejectedToday = (dashboardData?.recent_activities.sertifikasi_registrations || []).filter(r => r.status === 'Ditolak' && new Date(r.created_at).toLocaleDateString('id-ID') === today).length
+        + (dashboardData?.recent_activities.pkl_applications || []).filter(r => r.status === 'Ditolak' && new Date(r.created_at).toLocaleDateString('id-ID') === today).length;
+
+    const stats = dashboardData?.statistics;
+
+    return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Dashboard" />
+            <Head title="Dashboard Admin" />
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6 overflow-x-auto">
-                {/* Stats Cards */}
-                <div className="grid auto-rows-min gap-4 md:grid-cols-4">
-                    <Card className="p-6">
-                        <CardContent className="p-0">
-                            <CardTitle className="text-sm font-medium text-muted-foreground mb-2">
-                                Peserta Sertifikasi
-                            </CardTitle>
-                            <div className="text-2xl font-bold">120</div>
-                        </CardContent>
-                    </Card>
-                    <Card className="p-6">
-                        <CardContent className="p-0">
-                            <CardTitle className="text-sm font-medium text-muted-foreground mb-2">
-                                Siswa PKL
-                            </CardTitle>
-                            <div className="text-2xl font-bold">120</div>
-                        </CardContent>
-                    </Card>
-                    <Card className="p-6">
-                        <CardContent className="p-0">
-                            <CardTitle className="text-sm font-medium text-muted-foreground mb-2">
-                                Assessor
-                            </CardTitle>
-                            <div className="text-2xl font-bold">120</div>
-                        </CardContent>
-                    </Card>
-                    <Card className="p-6">
-                        <CardContent className="p-0">
-                            <CardTitle className="text-sm font-medium text-muted-foreground mb-2">
-                                Jumlah Sertifikasi
-                            </CardTitle>
-                            <div className="text-2xl font-bold">120</div>
-                        </CardContent>
-                    </Card>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">Dashboard Admin</h1>
+                        <p className="text-muted-foreground">
+                            Kelola semua konten dan data platform
+                        </p>
+                    </div>
                 </div>
 
-                {/* Pengajuan Pendaftaran Section */}
-                <Card className="flex-1">
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="text-xl font-semibold">Pengajuan Pendaftaran</CardTitle>
-                            <div className="flex items-center gap-2">
-                                <SearchBar
-                                    value={searchQuery}
-                                    onChange={setSearchQuery}
-                                    placeholder="Cari nama peserta atau program..."
-                                    className="w-64"
-                                />
-                                <FilterDropdown
-                                    activeFilters={activeFilters}
-                                    onFiltersChange={setActiveFilters}
-                                />
-                            </div>
+                {error && (
+                    <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+                        {error} – coba <button onClick={loadDashboardData} className="underline">muat ulang</button>
+                    </div>
+                )}
+                {!error && (
+                    <>
+                        {/* Stats Cards */}
+                        <div className="grid auto-rows-min gap-4 md:grid-cols-4">
+                            <Card className="p-6">
+                                <CardContent className="p-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-blue-100 rounded-lg">
+                                            <FileText className="h-5 w-5 text-blue-600" />
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{stats?.total_blogs || 0}</div>
+                                            <p className="text-sm text-muted-foreground">Total Blog</p>
+                                            <p className="text-xs text-green-600">Published</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card className="p-6">
+                                <CardContent className="p-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-red-100 rounded-lg">
+                                            <Video className="h-5 w-5 text-red-600" />
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{stats?.total_videos || 0}</div>
+                                            <p className="text-sm text-muted-foreground">Total Video</p>
+                                            <p className="text-xs text-green-600">Published</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card className="p-6">
+                                <CardContent className="p-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-yellow-100 rounded-lg">
+                                            <Award className="h-5 w-5 text-yellow-600" />
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{stats?.total_sertifikasi || 0}</div>
+                                            <p className="text-sm text-muted-foreground">Sertifikasi</p>
+                                            <p className="text-xs text-green-600">{stats?.total_batch_aktif || 0} Batch Aktif</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card className="p-6">
+                                <CardContent className="p-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-green-100 rounded-lg">
+                                            <Briefcase className="h-5 w-5 text-green-600" />
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{stats?.total_posisi_pkl || 0}</div>
+                                            <p className="text-sm text-muted-foreground">Posisi PKL</p>
+                                            <p className="text-xs text-green-600">Aktif</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </div>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[60px]">No</TableHead>
-                                    <TableHead>Nama</TableHead>
-                                    <TableHead>Jenis Pendaftaran</TableHead>
-                                    <TableHead>Tanggal Pendaftaran</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="w-[100px]">Aksi</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {paginatedData.length > 0 ? (
-                                    paginatedData.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell className="font-medium">{item.id}</TableCell>
-                                            <TableCell>{item.nama}</TableCell>
-                                            <TableCell>{item.jenisPendaftaran}</TableCell>
-                                            <TableCell>{item.tanggalPendaftaran}</TableCell>
-                                            <TableCell>
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.statusColor}`}>
-                                                    {item.status}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Button 
-                                                    variant="outline" 
-                                                    size="sm"
-                                                    onClick={() => handleDetailClick(item)}
-                                                >
-                                                    Detail
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                            {searchQuery || activeFilters.jenisPendaftaran.length > 0 || activeFilters.status.length > 0 || activeFilters.tanggalPendaftaran
-                                                ? 'Tidak ada data yang sesuai dengan filter atau pencarian'
-                                                : 'Tidak ada data pendaftaran'
-                                            }
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                    
-                    {/* Pagination Component - Di bawah tabel */}
-                    {totalItems > 0 && (
-                        <div className="border-t">
-                            <Pagination
-                                currentPage={currentPage}
-                                totalPages={totalPages}
-                                itemsPerPage={itemsPerPage}
-                                totalItems={totalItems}
-                                onPageChange={handlePageChange}
-                                onItemsPerPageChange={handleItemsPerPageChange}
-                            />
-                        </div>
-                    )}
-                </Card>
 
-                {/* Modal Detail Pendaftaran */}
-                {selectedPendaftar && (
-                    <DetailPendaftaranModal
-                        isOpen={isModalOpen}
-                        pendaftarData={selectedPendaftar}
-                        onClose={handleModalClose}
-                        onApproval={handleApproval}
-                    />
+                        {/* Additional Stats Cards */}
+                        <div className="grid gap-4 md:grid-cols-4">
+                            <Card className="p-6">
+                                <CardContent className="p-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-purple-100 rounded-lg">
+                                            <Users className="h-5 w-5 text-purple-600" />
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{stats?.total_users || 0}</div>
+                                            <p className="text-sm text-muted-foreground">Total Users</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card className="p-6">
+                                <CardContent className="p-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-orange-100 rounded-lg">
+                                            <Award className="h-5 w-5 text-orange-600" />
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{stats?.total_pendaftar_sertifikasi || 0}</div>
+                                            <p className="text-sm text-muted-foreground">Pendaftar Sertifikasi</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card className="p-6">
+                                <CardContent className="p-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-teal-100 rounded-lg">
+                                            <Briefcase className="h-5 w-5 text-teal-600" />
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{stats?.total_pendaftar_pkl || 0}</div>
+                                            <p className="text-sm text-muted-foreground">Pendaftar PKL</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Plus className="h-5 w-5" />
+                                        Quick Actions
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="grid gap-2">
+                                    <Link href="/admin/manajemen-blog">
+                                        <Button variant="outline" className="w-full justify-start">
+                                            <FileText className="mr-2 h-4 w-4" />
+                                            Manajemen Blog
+                                        </Button>
+                                    </Link>
+                                    <Link href="/admin/manajemen-video">
+                                        <Button variant="outline" className="w-full justify-start">
+                                            <Video className="mr-2 h-4 w-4" />
+                                            Manajemen Video
+                                        </Button>
+                                    </Link>
+                                    <Link href="/admin/manajemen-sertifikasi">
+                                        <Button variant="outline" className="w-full justify-start">
+                                            <Award className="mr-2 h-4 w-4" />
+                                            Manajemen Sertifikasi
+                                        </Button>
+                                    </Link>
+                                    <Link href="/admin/manajemen-pkl">
+                                        <Button variant="outline" className="w-full justify-start">
+                                            <Briefcase className="mr-2 h-4 w-4" />
+                                            Manajemen PKL
+                                        </Button>
+                                    </Link>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <TrendingUp className="h-5 w-5" />
+                                        Pengajuan Pendaftaran Terbaru
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-3">
+                                        {dashboardData?.recent_activities.sertifikasi_registrations?.slice(0, 5).map((registration: RecentRegistration) => (
+                                            <div key={`sertifikasi-${registration.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                                                <div className="p-1 bg-yellow-100 rounded">
+                                                    <Award className="h-3 w-3 text-yellow-600" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate">
+                                                        {registration.user.name} - {registration.batch_sertifikasi?.sertifikasi.nama_sertifikasi}
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {formatDate(registration.tanggal_pendaftaran)}
+                                                        </p>
+                                                        <span className={`inline-block px-2 py-1 text-xs rounded-full ${getStatusBadge(registration.status)}`}>
+                                                            {registration.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        
+                                        {dashboardData?.recent_activities.pkl_applications?.slice(0, 3).map((application: RecentRegistration) => (
+                                            <div key={`pkl-${application.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                                                <div className="p-1 bg-green-100 rounded">
+                                                    <Briefcase className="h-3 w-3 text-green-600" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate">
+                                                        {application.user.name} - {application.posisi_pkl?.nama_posisi}
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {formatDate(application.tanggal_pendaftaran)}
+                                                        </p>
+                                                        <span className={`inline-block px-2 py-1 text-xs rounded-full ${getStatusBadge(application.status)}`}>
+                                                            {application.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        
+                                        {(!dashboardData?.recent_activities.sertifikasi_registrations?.length && !dashboardData?.recent_activities.pkl_applications?.length) && (
+                                            <p className="text-sm text-muted-foreground text-center py-4">
+                                                Belum ada pendaftaran terbaru
+                                            </p>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* Pengajuan Pendaftaran (derived) */}
+                        <Card>
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="flex items-center gap-2">
+                                        <AlertCircle className="h-5 w-5" />
+                                        Pengajuan Pendaftaran
+                                        <Badge variant="secondary" className="ml-2">
+                                            {combinedPending.length} Pending
+                                        </Badge>
+                                    </CardTitle>
+                                    <div className="flex gap-2">
+                                        <Badge variant="outline" className="text-green-600">
+                                            <CheckCircle className="h-3 w-3 mr-1" />
+                                            {approvedToday} Disetujui Hari Ini
+                                        </Badge>
+                                        <Badge variant="outline" className="text-red-600">
+                                            <XCircle className="h-3 w-3 mr-1" />
+                                            {rejectedToday} Ditolak Hari Ini
+                                        </Badge>
+                                    </div>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    Kotak masuk untuk semua aplikasi baru dari pengguna yang memerlukan persetujuan admin
+                                </p>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-[50px]">No</TableHead>
+                                                <TableHead>Nama Pendaftar</TableHead>
+                                                <TableHead>Email</TableHead>
+                                                <TableHead>Jenis Program</TableHead>
+                                                <TableHead>Program/Posisi</TableHead>
+                                                <TableHead>Tanggal Daftar</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead className="text-right">Aksi</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {combinedPending.map((application, index) => (
+                                                <TableRow key={`pending-${application.type}-${application.id}`} className="hover:bg-muted/50">
+                                                    <TableCell className="font-medium">{index + 1}</TableCell>
+                                                    <TableCell className="font-medium">{application.user.name}</TableCell>
+                                                    <TableCell className="text-muted-foreground">{application.user.email}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={(application as any).type === 'sertifikasi' ? 'default' : 'secondary'}>
+                                                            {(application as any).type === 'sertifikasi' ? 'Sertifikasi' : 'PKL'}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[200px] truncate">
+                                                        {(application as any).programName}
+                                                    </TableCell>
+                                                    <TableCell>{formatDate(application.tanggal_pendaftaran)}</TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            <Clock className="h-4 w-4 text-yellow-500" />
+                                                            <span className="text-sm text-yellow-600 font-medium">Pengajuan</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm"
+                                                            onClick={() => openDetailModal(application)}
+                                                        >
+                                                            <Eye className="h-4 w-4 mr-1" />
+                                                            Detail
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                            
+                                            {combinedPending.length === 0 && (
+                                                <TableRow>
+                                                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <CheckCircle className="h-8 w-8 text-green-500" />
+                                                            <p>Tidak ada pengajuan pending yang memerlukan persetujuan</p>
+                                                            <p className="text-sm">Semua aplikasi telah diproses</p>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                            </CardContent>
+                        </Card>
+
+                        {/* Application Detail Modal */}
+                        <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+                            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                <DialogHeader>
+                                    <DialogTitle>Detail Pengajuan Pendaftaran</DialogTitle>
+                                    <DialogDescription>
+                                        Review lengkap data pendaftar dan berikan keputusan persetujuan
+                                    </DialogDescription>
+                                </DialogHeader>
+                                
+                                {selectedApplication && (
+                                    <div className="space-y-6">
+                                        {/* Informasi Pendaftar */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Nama Pendaftar</label>
+                                                <p className="text-sm font-semibold">{selectedApplication.user.name}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Email</label>
+                                                <p className="text-sm">{selectedApplication.user.email}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Jenis Program</label>
+                                                <Badge variant={selectedApplication.type === 'sertifikasi' ? 'default' : 'secondary'}>
+                                                    {selectedApplication.type === 'sertifikasi' ? 'Sertifikasi Kompetensi' : 'Praktik Kerja Lapangan'}
+                                                </Badge>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium text-muted-foreground">Tanggal Pendaftaran</label>
+                                                <p className="text-sm">{formatDate(selectedApplication.tanggal_pendaftaran)}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Program Details */}
+                                        <div className="border rounded-lg p-4 bg-muted/30">
+                                            <h4 className="font-semibold mb-2">Informasi Program</h4>
+                                            {selectedApplication.type === 'sertifikasi' && selectedApplication.batch_sertifikasi && (
+                                                <div className="space-y-2">
+                                                    <div>
+                                                        <label className="text-sm font-medium text-muted-foreground">Nama Sertifikasi</label>
+                                                        <p className="text-sm">{selectedApplication.batch_sertifikasi.sertifikasi.nama_sertifikasi}</p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-sm font-medium text-muted-foreground">Batch</label>
+                                                        <p className="text-sm">{selectedApplication.batch_sertifikasi.nama_batch}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {selectedApplication.type === 'pkl' && selectedApplication.posisi_pkl && (
+                                                <div>
+                                                    <label className="text-sm font-medium text-muted-foreground">Posisi PKL</label>
+                                                    <p className="text-sm">{selectedApplication.posisi_pkl.nama_posisi}</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Placeholder status dokumen (karena belum ada detail di data recent) */}
+                                        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm text-muted-foreground">
+                                            <AlertCircle className="h-5 w-5 text-yellow-500" />
+                                            <span>Detail kelengkapan dokumen tidak tersedia di data ringkas.</span>
+                                        </div>
+
+                                        {/* Rejection Reason Input */}
+                                        <div>
+                                            <label htmlFor="rejection-reason" className="text-sm font-medium text-muted-foreground">
+                                                Alasan Penolakan (wajib diisi jika menolak)
+                                            </label>
+                                            <Textarea
+                                                id="rejection-reason"
+                                                value={rejectionReason}
+                                                onChange={(e) => setRejectionReason(e.target.value)}
+                                                placeholder="Masukkan alasan jika Anda akan menolak pengajuan ini..."
+                                                className="mt-1"
+                                                rows={3}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <DialogFooter className="gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setIsDetailModalOpen(false)}
+                                        disabled={isSubmitting}
+                                    >
+                                        Batal
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        onClick={() => handleApplicationAction('rejected')}
+                                        disabled={isSubmitting || !rejectionReason.trim()}
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Memproses...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <XCircle className="mr-2 h-4 w-4" />
+                                                Tolak
+                                            </>
+                                        )}
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleApplicationAction('approved')}
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Memproses...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="mr-2 h-4 w-4" />
+                                                Setujui
+                                            </>
+                                        )}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </>
                 )}
             </div>
         </AppLayout>
